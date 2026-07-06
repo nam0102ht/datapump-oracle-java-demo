@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
+    username: APP_USER
+    password: AppPass123
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    database-platform: org.hibernate.dialect.OracleDialect
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 200MB
+
+app:
+  ingest:
+    batch-size: 1000
+    error-batch-size: 100
