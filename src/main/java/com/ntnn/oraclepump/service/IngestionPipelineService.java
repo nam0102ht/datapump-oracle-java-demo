@@ -16,10 +16,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.List;
 
 @Slf4j
 @Service
@@ -39,56 +37,52 @@ public class IngestionPipelineService {
     private int errorBatchSize;
 
     public IngestionJob ingest(MultipartFile file) {
-        LocalDateTime start = LocalDateTime.now();
-        String fileName = file.getOriginalFilename();
-        IngestionJob job = jobService.create(fileName);
+        var start    = Instant.now();
+        var fileName = file.getOriginalFilename();
+        var job      = jobService.create(fileName);
 
-        long rowsRead = 0;
+        long rowsRead   = 0;
         long rowsFailed = 0;
-        List<IngestionError> errorBatch = new ArrayList<>(errorBatchSize);
-        ShardBuffer buffer = new ShardBuffer(batchSize, shardWriter);
+        var  errorBatch = new ArrayList<IngestionError>(errorBatchSize);
+        var  buffer     = new ShardBuffer(batchSize, shardWriter);
 
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(file.getInputStream()))) {
+        try (var reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
 
             String line;
             int lineNo = 0;
 
             while ((line = reader.readLine()) != null) {
                 lineNo++;
-
-                if (lineNo == 1 && parser.isHeader(line)) {
-                    continue;
-                }
+                if (lineNo == 1 && parser.isHeader(line)) continue;
 
                 rowsRead++;
-                ParseResult result = parser.parseLine(lineNo, line);
 
-                if (result.isSuccess()) {
-                    int shard = router.route(result.getRecord().getMachineId());
-                    buffer.add(shard, result.getRecord());
-                } else {
-                    rowsFailed++;
-                    errorBatch.add(buildError(fileName, result));
-                    if (errorBatch.size() >= errorBatchSize) {
-                        errorRepository.saveAll(errorBatch);
-                        errorBatch.clear();
+                // Record-pattern switch — compiler enforces exhaustiveness over the sealed hierarchy
+                switch (parser.parseLine(lineNo, line)) {
+                    case ParseResult.Success(var record) ->
+                        buffer.add(router.route(record.machineId()), record);
+
+                    case ParseResult.Failure f -> {
+                        rowsFailed++;
+                        errorBatch.add(toError(fileName, f));
+                        if (errorBatch.size() >= errorBatchSize) {
+                            errorRepository.saveAll(errorBatch);
+                            errorBatch.clear();
+                        }
                     }
                 }
             }
 
             buffer.flushAll();
-            if (!errorBatch.isEmpty()) {
-                errorRepository.saveAll(errorBatch);
-            }
+            if (!errorBatch.isEmpty()) errorRepository.saveAll(errorBatch);
 
         } catch (Exception e) {
-            log.error("Ingestion failed for file {}: {}", fileName, e.getMessage(), e);
+            log.error("Ingestion failed — file={} error={}", fileName, e.getMessage(), e);
             jobService.fail(job.getId());
             throw new RuntimeException("Ingestion failed: " + e.getMessage(), e);
         }
 
-        long elapsedMs = ChronoUnit.MILLIS.between(start, LocalDateTime.now());
+        var elapsedMs = Instant.now().toEpochMilli() - start.toEpochMilli();
         jobService.complete(job.getId(), rowsRead, buffer.getTotalInserted(), rowsFailed, elapsedMs);
 
         log.info("Ingest done — file={} read={} inserted={} failed={} elapsed={}ms",
@@ -97,12 +91,12 @@ public class IngestionPipelineService {
         return jobService.findById(job.getId());
     }
 
-    private IngestionError buildError(String fileName, ParseResult result) {
-        IngestionError error = new IngestionError();
+    private IngestionError toError(String fileName, ParseResult.Failure f) {
+        var error = new IngestionError();
         error.setFileName(fileName);
-        error.setLineNo(result.getLineNo());
-        error.setReason(result.getErrorReason());
-        String raw = result.getRawLine();
+        error.setLineNo(f.lineNo());
+        error.setReason(f.reason());
+        var raw = f.rawLine();
         error.setRawData(raw != null && raw.length() > 4000 ? raw.substring(0, 4000) : raw);
         return error;
     }

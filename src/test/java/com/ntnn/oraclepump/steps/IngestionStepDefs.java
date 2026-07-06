@@ -9,7 +9,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.io.File;
 import java.nio.file.Files;
-import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,9 +43,11 @@ public class IngestionStepDefs {
 
     @Given("a DTFT file containing MachineID {int} and MachineID {int}")
     public void fileWithSpecificMachineIds(int id1, int id2) throws Exception {
-        String content = "MachineID|Timestamp|Temperature|Pressure|Status|Operator\n" +
-            id1 + "|2026-07-05T10:00:00|85.5|101.3|RUNNING|Op1\n" +
-            id2 + "|2026-07-05T10:01:00|86.0|102.0|RUNNING|Op2\n";
+        var content = """
+            MachineID|Timestamp|Temperature|Pressure|Status|Operator
+            %d|2026-07-05T10:00:00|85.5|101.3|RUNNING|Op1
+            %d|2026-07-05T10:01:00|86.0|102.0|RUNNING|Op2
+            """.formatted(id1, id2);
         testFile = writeTempFile(content);
     }
 
@@ -89,7 +90,7 @@ public class IngestionStepDefs {
 
     @Then("MachineID {int} is stored in shard table {string}")
     public void machineIdInShard(int machineId, String tableName) {
-        Integer count = jdbcTemplate.queryForObject(
+        var count = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM " + tableName + " WHERE machine_id = ?",
             Integer.class, (long) machineId);
         assertThat(count).isGreaterThan(0);
@@ -98,30 +99,29 @@ public class IngestionStepDefs {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private File buildValidFile(int count) throws Exception {
-        StringBuilder sb = new StringBuilder("MachineID|Timestamp|Temperature|Pressure|Status|Operator\n");
+        var sb = new StringBuilder("MachineID|Timestamp|Temperature|Pressure|Status|Operator\n");
         for (int i = 0; i < count; i++) {
-            sb.append(String.format("%d|2026-07-05T%02d:%02d:00|%.2f|%.3f|RUNNING|Op%d\n",
-                10000L + i, (i / 60) % 24, i % 60, 80.0 + (i % 20), 100.0 + i * 0.01, i % 10));
+            sb.append("%d|2026-07-05T%02d:%02d:00|%.2f|%.3f|RUNNING|Op%d\n"
+                .formatted(10000L + i, (i / 60) % 24, i % 60, 80.0 + (i % 20), 100.0 + i * 0.01, i % 10));
         }
         return writeTempFile(sb.toString());
     }
 
     private File buildMixedFile(int valid, int invalid) throws Exception {
-        StringBuilder sb = new StringBuilder("MachineID|Timestamp|Temperature|Pressure|Status|Operator\n");
+        var sb = new StringBuilder("MachineID|Timestamp|Temperature|Pressure|Status|Operator\n");
         for (int i = 0; i < valid; i++) {
-            sb.append(String.format("%d|2026-07-05T10:%02d:00|85.5|101.3|RUNNING|Op%d\n",
-                10000L + i, i % 60, i));
+            sb.append("%d|2026-07-05T10:%02d:00|85.5|101.3|RUNNING|Op%d\n"
+                .formatted(10000L + i, i % 60, i));
         }
         for (int i = 0; i < invalid; i++) {
-            // temperature field is non-numeric — triggers ParseResult.failure
-            sb.append(String.format("%d|2026-07-05T10:%02d:00|INVALID|101.3|RUNNING|Op%d\n",
-                20000L + i, i % 60, i));
+            sb.append("%d|2026-07-05T10:%02d:00|INVALID|101.3|RUNNING|Op%d\n"
+                .formatted(20000L + i, i % 60, i));
         }
         return writeTempFile(sb.toString());
     }
 
     private File writeTempFile(String content) throws Exception {
-        Path tmp = Files.createTempFile("dtft-test-", ".dtft");
+        var tmp = Files.createTempFile("dtft-test-", ".dtft");
         Files.writeString(tmp, content);
         tmp.toFile().deleteOnExit();
         return tmp.toFile();

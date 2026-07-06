@@ -21,7 +21,8 @@ public class IngestionController {
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
-        return ResponseEntity.ok(IngestionResponse.from(pipelineService.ingest(file)));
+        var job = pipelineService.ingest(file);
+        return ResponseEntity.ok(IngestionResponse.from(job));
     }
 
     @GetMapping("/{jobId}")

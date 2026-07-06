@@ -1,17 +1,13 @@
 package com.ntnn.oraclepump.domain;
 
-import lombok.Builder;
-import lombok.Data;
 import java.time.LocalDateTime;
 
-@Data
-@Builder
-public class ParsedRecord {
-    private long machineId;
-    private LocalDateTime timestamp;
-    private Double temperature;
-    private Double pressure;
-    private String status;
-    private String operator;
-    private int lineNo;
-}
+public record ParsedRecord(
+    long machineId,
+    LocalDateTime timestamp,
+    double temperature,
+    double pressure,
+    String status,
+    String operator,
+    int lineNo
+) {}

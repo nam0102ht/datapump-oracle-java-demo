@@ -20,22 +20,22 @@ public class ShardWriterService {
 
     @Transactional
     public int batchInsert(int shard, List<ParsedRecord> records) {
-        String sql = "INSERT INTO " + shardRouter.tableName(shard) +
-            " (machine_id, log_timestamp, temperature, pressure, status, operator)" +
-            " VALUES (?, ?, ?, ?, ?, ?)";
+        var sql = """
+            INSERT INTO %s (machine_id, log_timestamp, temperature, pressure, status, operator)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """.formatted(shardRouter.tableName(shard));
 
-        List<Object[]> args = records.stream()
+        var args = records.stream()
             .map(r -> new Object[]{
-                r.getMachineId(),
-                Timestamp.valueOf(r.getTimestamp()),
-                r.getTemperature(),
-                r.getPressure(),
-                r.getStatus(),
-                r.getOperator()
+                r.machineId(),
+                Timestamp.valueOf(r.timestamp()),
+                r.temperature(),
+                r.pressure(),
+                r.status(),
+                r.operator()
             })
             .toList();
 
-        int[] counts = jdbcTemplate.batchUpdate(sql, args);
-        return Arrays.stream(counts).sum();
+        return Arrays.stream(jdbcTemplate.batchUpdate(sql, args)).sum();
     }
 }
